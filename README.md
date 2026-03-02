@@ -1,6 +1,6 @@
 <div align="center">
   <img src="openclaw-control-panel.ico" alt="OpenClaw Control Panel Logo" width="120" height="120" />
-  <h1>OpenClaw Windows 控制面板 🎛️<br><sub>(Release 发行版)</sub></h1>
+  <h1>OpenClaw Windows 控制面板 🎛️</h1>
 
   <p>
     <b>告别繁琐的终端命令！</b>这是一款专为 Windows 用户打造的轻量级 <b>GUI 工具</b>，旨在帮助您轻松启动、停止、检查运行状态，并一键打开 OpenClaw 控制台 UI。<br>
