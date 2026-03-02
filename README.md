@@ -16,7 +16,6 @@
     <img alt="UI language" src="https://img.shields.io/badge/Languages-EN%20%7C%20ZH--Hans%20%7C%20ZH--Hant-brightgreen?style=flat-square" />
   </p>
 
-  <p><i>🛡️ <b>隐私安全承诺</b>：此仓库为纯净的发布版本（仅包含二进制文件与辅助脚本）。不捆绑任何 Token、日志或个人运行时敏感文件。</i></p>
 </div>
 
 ---
