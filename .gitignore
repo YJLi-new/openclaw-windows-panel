@@ -1,0 +1,13 @@
+# Runtime/private data (do not publish)
+openclaw-control-panel-settings.json
+openclaw-control-panel-error.log
+openclaw-control-panel-launch.log
+openclaw-control-panel-runtime.log
+openclaw-control-panel-settings.private.json
+.sudo-pass
+.gateway-token
+*.log
+
+# Windows metadata
+Thumbs.db
+Desktop.ini

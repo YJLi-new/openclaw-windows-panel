@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "language": "",
+  "theme": "",
+  "mode": {
+    "auto_detect": true,
+    "manual_override": "",
+    "last_detected": ""
+  },
+  "profiles": {
+    "wsl_docker": {
+      "windows_project_dir": "",
+      "wsl_project_dir": "",
+      "wsl_docker_openclaw_dir": "",
+      "wsl_docker_data_dir": "",
+      "wsl_docker_start_script": "",
+      "wsl_docker_dashboard_script": ""
+    },
+    "wsl_native": {
+      "wsl_native_project_dir": "",
+      "wsl_native_openclaw_command": "",
+      "wsl_native_install_command": ""
+    },
+    "win_docker": {
+      "win_docker_openclaw_dir": "",
+      "win_docker_data_dir": ""
+    },
+    "win_native": {
+      "win_native_project_dir": "",
+      "win_native_openclaw_command": "",
+      "win_native_install_command": ""
+    }
+  },
+  "docker": {
+    "docker_compose_command": "",
+    "gateway_service_name": "",
+    "gateway_root_url": ""
+  },
+  "dashboard": {
+    "browser_target": ""
+  },
+  "network": {
+    "proxy_mode": "",
+    "custom_http_proxy": "",
+    "custom_https_proxy": "",
+    "custom_all_proxy": "",
+    "custom_no_proxy": "",
+    "wsl_sudo_password_dpapi": ""
+  }
+}
