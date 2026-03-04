@@ -14,6 +14,88 @@ OPENCLAW_CHROME_CDP_PORT="${OPENCLAW_CHROME_CDP_PORT:-19222}"
 OPENCLAW_CHROME_CDP_BRIDGE_PORT="${OPENCLAW_CHROME_CDP_BRIDGE_PORT:-29222}"
 CDP_BRIDGE_LOG_FILE="/tmp/openclaw-cdp-bridge.log"
 
+is_wsl_env() {
+  [[ -n "${WSL_DISTRO_NAME:-}" ]] && return 0
+  [[ -r /proc/version ]] && grep -qi "microsoft" /proc/version && return 0
+  return 1
+}
+
+configure_wsl_clash_proxy() {
+  # Set OPENCLAW_AUTO_WSL_PROXY=0 to disable auto-proxy bootstrap.
+  if [[ "${OPENCLAW_AUTO_WSL_PROXY:-1}" == "0" ]]; then
+    return 0
+  fi
+
+  # Respect explicit caller-provided proxy values.
+  if [[ -n "${HTTP_PROXY:-}" || -n "${HTTPS_PROXY:-}" || -n "${ALL_PROXY:-}" ]]; then
+    return 0
+  fi
+
+  if ! is_wsl_env; then
+    return 0
+  fi
+
+  local wsl_host_ip
+  wsl_host_ip="$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')"
+  if [[ -z "$wsl_host_ip" ]]; then
+    return 0
+  fi
+
+  export HTTPS_PROXY="http://${wsl_host_ip}:4780"
+  export HTTP_PROXY="$HTTPS_PROXY"
+  export ALL_PROXY="socks5h://${wsl_host_ip}:4781"
+  export NO_PROXY="localhost,127.0.0.1,::1,host.docker.internal"
+  export https_proxy="$HTTPS_PROXY"
+  export http_proxy="$HTTP_PROXY"
+  export all_proxy="$ALL_PROXY"
+  export no_proxy="$NO_PROXY"
+
+  echo "Using WSL Clash proxy via ${wsl_host_ip} (HTTP 4780 / SOCKS5 4781)."
+}
+
+normalize_chrome_proxy_server() {
+  local raw="$1"
+  if [[ -z "$raw" ]]; then
+    echo ""
+    return 0
+  fi
+  # Chrome accepts socks5:// but not socks5h://
+  raw="${raw/socks5h:\/\//socks5://}"
+  echo "$raw"
+}
+
+disable_proxy_env() {
+  unset HTTP_PROXY HTTPS_PROXY ALL_PROXY
+  unset http_proxy https_proxy all_proxy
+}
+
+ensure_proxy_reachable_or_disable() {
+  local probe="${HTTPS_PROXY:-${HTTP_PROXY:-${ALL_PROXY:-}}}"
+  if [[ -z "$probe" ]]; then
+    return 0
+  fi
+
+  local hostport="${probe#*://}"
+  hostport="${hostport%%/*}"
+  local host="${hostport%:*}"
+  local port="${hostport##*:}"
+  if [[ -z "$host" || -z "$port" ]]; then
+    return 0
+  fi
+
+  local proxy_ok=0
+  if command -v nc >/dev/null 2>&1; then
+    nc -z -w 1 "$host" "$port" >/dev/null 2>&1 && proxy_ok=1 || true
+  elif command -v timeout >/dev/null 2>&1; then
+    timeout 1 bash -c "</dev/tcp/${host}/${port}" >/dev/null 2>&1 && proxy_ok=1 || true
+  fi
+
+  if [[ "$proxy_ok" != "1" ]]; then
+    echo "Proxy ${host}:${port} unreachable; disabling proxy for Chrome."
+    disable_proxy_env
+  fi
+}
+
 if [ ! -f "$TOKEN_FILE" ]; then
   echo "Token file not found: $TOKEN_FILE" >&2
   echo "Start OpenClaw first, then try again." >&2
@@ -88,6 +170,9 @@ exec "$@"
 EOF
 chmod +x "$LAUNCHER_SCRIPT"
 
+configure_wsl_clash_proxy
+ensure_proxy_reachable_or_disable
+
 CHROME_ARGS=(
   --user-data-dir="$PROFILE_DIR"
   --no-first-run
@@ -100,6 +185,17 @@ CHROME_ARGS=(
   --remote-allow-origins=*
   "$URL"
 )
+
+PROXY_SERVER_RAW="${ALL_PROXY:-${HTTPS_PROXY:-${HTTP_PROXY:-}}}"
+PROXY_SERVER="$(normalize_chrome_proxy_server "$PROXY_SERVER_RAW")"
+if [[ -n "$PROXY_SERVER" ]]; then
+  CHROME_ARGS+=(--proxy-server="$PROXY_SERVER")
+  NO_PROXY_EFFECTIVE="${NO_PROXY:-${no_proxy:-}}"
+  if [[ -n "$NO_PROXY_EFFECTIVE" ]]; then
+    NO_PROXY_EFFECTIVE="${NO_PROXY_EFFECTIVE//,/;}"
+    CHROME_ARGS+=(--proxy-bypass-list="$NO_PROXY_EFFECTIVE")
+  fi
+fi
 
 # Relaunch the profile cleanly so new flags (e.g. CDP port) always take effect.
 mapfile -t OLD_CHROME_PIDS < <(pgrep -f -- "--user-data-dir=$PROFILE_DIR" || true)
@@ -137,6 +233,9 @@ echo "Log: $LOG_FILE"
 echo "Launch mode: $LAUNCH_MODE"
 echo "IME: fcitx5 (Ctrl+Space to toggle EN/中文)"
 echo "CDP: http://127.0.0.1:$OPENCLAW_CHROME_CDP_PORT"
+if [ -n "$PROXY_SERVER" ]; then
+  echo "Chrome proxy: $PROXY_SERVER"
+fi
 if [ -n "$CDP_BRIDGE_PID" ]; then
   echo "CDP Bridge PID: $CDP_BRIDGE_PID"
   echo "CDP Bridge: http://127.0.0.1:$OPENCLAW_CHROME_CDP_BRIDGE_PORT -> 127.0.0.1:$OPENCLAW_CHROME_CDP_PORT"
