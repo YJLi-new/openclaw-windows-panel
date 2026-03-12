@@ -31,6 +31,11 @@ function Invoke-WslCapture {
   }
 }
 
+function Quote-WslLiteral {
+  param([string]$Value)
+  return "'" + $Value.Replace("'", "'""'""'") + "'"
+}
+
 function Get-GatewayToken {
   $result = Invoke-WslCapture "if [ -f ~/.openclaw/.gateway-token ] && [ -s ~/.openclaw/.gateway-token ]; then tr -d '\r\n' < ~/.openclaw/.gateway-token; else printf 'dev-local-token'; fi"
   if ($result.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($result.Output)) {
@@ -54,6 +59,101 @@ function Get-GatewayState {
     return 'running'
   }
   return 'stopped'
+}
+
+function Test-WslFileExists {
+  param([string]$Path)
+  $quoted = Quote-WslLiteral $Path
+  $result = Invoke-WslCapture "if [ -f $quoted ]; then printf 'yes'; else printf 'no'; fi"
+  return $result.Output -eq 'yes'
+}
+
+function Get-WslHome {
+  $result = Invoke-WslCapture 'printf %s "$HOME"'
+  return $result.Output
+}
+
+function Get-WslUser {
+  $result = Invoke-WslCapture 'whoami'
+  return $result.Output
+}
+
+function Get-WslDistroName {
+  $result = Invoke-WslCapture 'printf %s "${WSL_DISTRO_NAME:-}"'
+  if (-not [string]::IsNullOrWhiteSpace($result.Output)) {
+    return $result.Output
+  }
+  if (-not [string]::IsNullOrWhiteSpace($distro)) {
+    return $distro
+  }
+  return 'unknown'
+}
+
+function Get-WslExecStart {
+  $result = Invoke-WslCapture "systemctl --user show $serviceName --property ExecStart --value 2>/dev/null || true"
+  return $result.Output
+}
+
+function Resolve-WslProjectDir {
+  if (-not [string]::IsNullOrWhiteSpace($env:OPENCLAW_WSL_PROJECT_DIR)) {
+    return $env:OPENCLAW_WSL_PROJECT_DIR.Trim()
+  }
+
+  $execStart = Get-WslExecStart
+  if ($execStart -match '(/[^ ;]+?)/dist/index\.js') {
+    return $Matches[1]
+  }
+
+  $home = Get-WslHome
+  if ([string]::IsNullOrWhiteSpace($home)) {
+    return ''
+  }
+
+  foreach ($candidate in @(
+    "$home/src/openclaw-cn",
+    "$home/src/openclaw",
+    "$home/openclaw-cn",
+    "$home/openclaw"
+  )) {
+    $quoted = Quote-WslLiteral $candidate
+    $result = Invoke-WslCapture "if [ -d $quoted ]; then printf %s $quoted; fi"
+    if (-not [string]::IsNullOrWhiteSpace($result.Output)) {
+      return $result.Output
+    }
+  }
+
+  return ''
+}
+
+function Get-RuntimeDiagnostics {
+  $home = Get-WslHome
+  $userName = Get-WslUser
+  $distroName = Get-WslDistroName
+  $projectDir = Resolve-WslProjectDir
+  $dataDir = if ($env:OPENCLAW_DATA_DIR) { $env:OPENCLAW_DATA_DIR.Trim() } elseif (-not [string]::IsNullOrWhiteSpace($home)) { "$home/.openclaw" } else { '~/.openclaw' }
+  $configPath = if ($env:OPENCLAW_CONFIG_PATH) { $env:OPENCLAW_CONFIG_PATH.Trim() } else { "$dataDir/openclaw.json" }
+  $sessionsPath = if ($env:OPENCLAW_MAIN_SESSION_STORE) { $env:OPENCLAW_MAIN_SESSION_STORE.Trim() } else { "$dataDir/agents/main/sessions/sessions.json" }
+  $execStart = Get-WslExecStart
+
+  $lines = @(
+    'runtime_host=wsl2',
+    ('runtime_service=' + $serviceName),
+    ('runtime_user=' + $(if ([string]::IsNullOrWhiteSpace($userName)) { 'unknown' } else { $userName })),
+    ('runtime_distro=' + $distroName),
+    ('runtime_project_dir=' + $(if ([string]::IsNullOrWhiteSpace($projectDir)) { 'unknown' } else { $projectDir })),
+    ('runtime_data_dir=' + $dataDir),
+    ('runtime_config_path=' + $configPath),
+    ('runtime_config_exists=' + $(if (Test-WslFileExists $configPath) { 'yes' } else { 'no' })),
+    ('runtime_sessions_path=' + $sessionsPath),
+    ('runtime_sessions_exists=' + $(if (Test-WslFileExists $sessionsPath) { 'yes' } else { 'no' })),
+    'runtime_diagnose_hint=openclaw-find-runtime-paths.ps1'
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($execStart)) {
+    $lines += ('runtime_exec_start=' + $execStart)
+  }
+
+  return $lines
 }
 
 function Write-StatusBlock {
@@ -85,6 +185,9 @@ function Write-StatusBlock {
   Write-Host ('http_root=' + $httpRoot)
   Write-Host ('http_health=' + $httpHealth)
   Write-Host 'ok=1'
+  foreach ($line in Get-RuntimeDiagnostics) {
+    Write-Host $line
+  }
 }
 
 function Start-Gateway {
@@ -143,6 +246,13 @@ if ($Args.Count -ge 1 -and $Args[0] -eq 'dashboard') {
   $url = $gatewayUrl + '#token=' + $token
   Start-Process $url | Out-Null
   Write-Output ('dashboard_url=' + $url)
+  exit 0
+}
+
+if ($Args.Count -ge 1 -and ($Args[0] -eq 'runtime-paths' -or $Args[0] -eq 'where' -or $Args[0] -eq 'doctor.runtime-paths')) {
+  foreach ($line in Get-RuntimeDiagnostics) {
+    Write-Output $line
+  }
   exit 0
 }
 
