@@ -177,13 +177,15 @@ open_dashboard() {
   token="$(get_token)"
   url="${DASHBOARD_URL_BASE}#token=${token}"
 
-  if command -v wslview >/dev/null 2>&1; then
-    wslview "$url" >/dev/null 2>&1 &
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process '$url'" >/dev/null 2>&1 || true
   elif command -v explorer.exe >/dev/null 2>&1; then
-    explorer.exe "$url" >/dev/null 2>&1 &
-  else
-    printf '%s\n' "$url"
+    explorer.exe "$url" >/dev/null 2>&1 || true
+  elif command -v wslview >/dev/null 2>&1; then
+    wslview "$url" >/dev/null 2>&1 || true
   fi
+
+  printf '%s\n' "$url"
 }
 
 main() {

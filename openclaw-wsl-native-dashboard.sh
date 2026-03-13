@@ -12,10 +12,12 @@ fi
 
 URL="${DASHBOARD_URL_BASE}#token=${TOKEN}"
 
-if command -v wslview >/dev/null 2>&1; then
-  wslview "$URL" >/dev/null 2>&1 &
+if command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process '$URL'" >/dev/null 2>&1 || true
 elif command -v explorer.exe >/dev/null 2>&1; then
-  explorer.exe "$URL" >/dev/null 2>&1 &
-else
-  printf '%s\n' "$URL"
+  explorer.exe "$URL" >/dev/null 2>&1 || true
+elif command -v wslview >/dev/null 2>&1; then
+  wslview "$URL" >/dev/null 2>&1 || true
 fi
+
+printf '%s\n' "$URL"

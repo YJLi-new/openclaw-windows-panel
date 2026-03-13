@@ -135,7 +135,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\openclaw-find-runtime-path
   - 提供 `config get gateway.auth.token`、`gateway status/start/stop/run` 和 `status` 兼容层
 - `openclaw-wsl-native-dashboard.sh`
   - 作为 WSL 内打开 Dashboard 的脚本
-  - 自动读取 `.gateway-token` 并通过 `wslview` / `explorer.exe` 打开本机控制台
+  - 自动读取 `.gateway-token`，优先通过 `powershell.exe Start-Process` 调起 Windows 默认浏览器；若不可用再回退到 `explorer.exe` / `wslview`
 
 推荐字段如下：
 
@@ -228,7 +228,7 @@ OpenClaw 的控制台 UI 采用了 **Token/密码验证** + **设备身份配对
   - 兼容面板需要的 `config get gateway.auth.token`、`gateway status/start/stop/run` 调用，并附带一个轻量 sentinel 进程，避免 WSL 原生模式被误判为 `gateway=stopped`。
   - `status` 输出会附带 `runtime_*` 诊断字段，直接告诉您当前真实项目目录、数据目录和配置路径。
 - 🧭 **`openclaw-wsl-native-dashboard.sh`** (WSL 原生一键打开 Dashboard)
-  - 面向 `wsl_native` 模式的轻量 opener，自动读取 token，并尽量使用 `wslview` 或 `explorer.exe` 打开浏览器。
+  - 面向 `wsl_native` 模式的轻量 opener，自动读取 token，优先使用 `powershell.exe Start-Process` 调起 Windows 默认浏览器，并回退到 `explorer.exe` / `wslview`。
 - 🪟 **`openclaw-win-native-entry.ps1`** (Windows 原生兼容入口)
   - 适用于面板运行在 Windows、但实际 OpenClaw gateway 仍在 WSL 里的场景。
   - 通过 `wsl.exe` 桥接 `config get gateway.auth.token`、`gateway status/start/stop/run`、`dashboard` 等调用。
