@@ -7,7 +7,7 @@ $runnerPath = Join-Path $PSScriptRoot 'openclaw-wsl-bridge-runner.ps1'
 $taskName = if ($env:OPENCLAW_WSL_BRIDGE_TASK) { $env:OPENCLAW_WSL_BRIDGE_TASK.Trim() } else { 'OpenClawWslCommandV2' }
 $stageDir = if ($env:OPENCLAW_WSL_BRIDGE_DIR) { $env:OPENCLAW_WSL_BRIDGE_DIR.Trim() } else { Join-Path $env:LOCALAPPDATA 'OpenClawWslBridge' }
 $wslExe = Join-Path $env:SystemRoot 'System32\wsl.exe'
-$windowsUser = if ($env:OPENCLAW_WSL_WINDOWS_USER) { $env:OPENCLAW_WSL_WINDOWS_USER.Trim() } else { [System.Security.Principal.WindowsIdentity]::GetCurrent().Name }
+$windowsUser = if ($env:OPENCLAW_WSL_WINDOWS_USER) { $env:OPENCLAW_WSL_WINDOWS_USER.Trim() } else { 'Administrator' }
 
 if (-not (Test-Path $runnerPath)) {
   throw "Runner script was not found: $runnerPath"

@@ -15,11 +15,17 @@ $wslProjectDir = if ($env:OPENCLAW_WSL_PROJECT_DIR) { $env:OPENCLAW_WSL_PROJECT_
 $runtimeConfigPath = if ($env:OPENCLAW_CONFIG_PATH) { $env:OPENCLAW_CONFIG_PATH.Trim() } else { $linuxHome + '/.openclaw/openclaw.cherry.json' }
 $runtimeSessionsPath = if ($env:OPENCLAW_MAIN_SESSION_STORE) { $env:OPENCLAW_MAIN_SESSION_STORE.Trim() } else { $linuxHome + '/.openclaw/main.sqlite' }
 $healthUrl = $gatewayUrl.TrimEnd('/') + '/health'
-$windowsUser = if ($env:OPENCLAW_WSL_WINDOWS_USER) { $env:OPENCLAW_WSL_WINDOWS_USER.Trim() } else { [System.Security.Principal.WindowsIdentity]::GetCurrent().Name }
+$windowsUser = if ($env:OPENCLAW_WSL_WINDOWS_USER) { $env:OPENCLAW_WSL_WINDOWS_USER.Trim() } else { 'Administrator' }
+$bridgeStageDir = if ($env:OPENCLAW_WSL_BRIDGE_DIR) { $env:OPENCLAW_WSL_BRIDGE_DIR.Trim() } else { 'C:\Users\' + $windowsUser + '\AppData\Local\OpenClawWslBridge' }
 
 if (-not $gatewayUrl.EndsWith('/')) {
   $gatewayUrl += '/'
 }
+
+$env:OPENCLAW_WSL_WINDOWS_USER = $windowsUser
+$env:OPENCLAW_WSL_BRIDGE_DIR = $bridgeStageDir
+$env:OPENCLAW_WSL_DISTRO = $distro
+$env:OPENCLAW_WSL_USER = $linuxUser
 
 function Ensure-BridgeInstalled {
   if (-not (Get-ScheduledTask -TaskName $bridgeTaskName -ErrorAction SilentlyContinue)) {
