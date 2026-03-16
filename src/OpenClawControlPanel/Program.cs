@@ -1874,7 +1874,7 @@ namespace OpenClawControlPanel
 
             private string BuildWslNativeStartCommand()
             {
-                string openclaw = NormalizeCommandText(_wslNativeOpenclawCommand, DefaultWslNativeOpenclawCommand);
+                string openclaw = GetWslNativeDashboardCliCommand();
                 int port = GetGatewayPort();
                 string rootUrl = NormalizeGatewayRootUrl(_gatewayRootUrl);
                 string healthUrl = rootUrl.TrimEnd('/') + "/health";
@@ -1949,7 +1949,7 @@ namespace OpenClawControlPanel
 
             private string BuildWslNativeStopCommand()
             {
-                string openclaw = NormalizeCommandText(_wslNativeOpenclawCommand, DefaultWslNativeOpenclawCommand);
+                string openclaw = GetWslNativeDashboardCliCommand();
                 int port = GetGatewayPort();
                 return string.Join(
                     "\n",
