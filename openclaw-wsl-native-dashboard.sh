@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ADMIN_BRIDGE="${SCRIPT_DIR}/openclaw-wsl-admin-bridge.sh"
+if [[ -f "$ADMIN_BRIDGE" ]]; then
+  exec "$ADMIN_BRIDGE" dashboard
+fi
+
 TOKEN_FILE="${OPENCLAW_TOKEN_FILE:-$HOME/.openclaw/.gateway-token}"
 DASHBOARD_URL_BASE="${OPENCLAW_DASHBOARD_URL_BASE:-http://127.0.0.1:18789/}"
 

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ADMIN_BRIDGE="${SCRIPT_DIR}/openclaw-wsl-admin-bridge.sh"
+if [[ -f "$ADMIN_BRIDGE" ]]; then
+  exec "$ADMIN_BRIDGE" start
+fi
+
 BASE_DIR="${OPENCLAW_BASE_DIR:-}"
 if [[ -z "$BASE_DIR" ]]; then
   echo "Please set OPENCLAW_BASE_DIR first." >&2

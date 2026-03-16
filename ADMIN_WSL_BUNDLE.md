@@ -22,6 +22,10 @@
 - `openclaw-wsl-bridge.ps1`
 - `openclaw-wsl-bridge-runner.ps1`
 - `openclaw-wsl-admin-bridge.sh`
+- `openclaw-open-dashboard-wsl.sh`
+- `openclaw-start-fast.sh`
+- `openclaw-wsl-native-dashboard.sh`
+- `openclaw-wsl-native-helper.sh`
 - `install-openclaw-wsl-bridge.ps1`
 - `new-admin-wsl-panel-settings.ps1`
 - `openclaw-find-runtime-paths.ps1`
@@ -59,3 +63,4 @@ Set-ExecutionPolicy -Scope Process Bypass
 - 这个 bundle 复用的是已有 `.exe`，不是新源码重编译版 GUI。
 - 因为当前仓库没有这款 GUI 的 C# 源码，所以这里做的是“可交付的推荐发行包”，不是改 GUI 按钮布局。
 - 如果你要真正新增 GUI 按钮或页面，需要拿到原 GUI 的源码再改。
+- 当前 `.exe` 仍然内置了旧的 WSL 脚本入口名，所以 bundle 里保留了同名兼容脚本，并统一转发到 `openclaw-wsl-admin-bridge.sh`。
