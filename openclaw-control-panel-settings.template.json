@@ -33,18 +33,19 @@
   },
   "docker": {
     "docker_compose_command": "",
-    "gateway_service_name": "",
-    "gateway_root_url": ""
+    "gateway_service_name": ""
   },
   "dashboard": {
-    "browser_target": ""
+    "gateway_root_url": "",
+    "browser_target": "",
+    "wsl_chrome_backend": ""
   },
   "network": {
     "proxy_mode": "",
     "custom_http_proxy": "",
     "custom_https_proxy": "",
     "custom_all_proxy": "",
-    "custom_no_proxy": "",
+    "custom_no_proxy": "localhost,127.0.0.1,::1",
     "wsl_sudo_password_dpapi": ""
   }
 }
