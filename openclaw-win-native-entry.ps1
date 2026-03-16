@@ -237,6 +237,13 @@ function Open-DashboardUrl {
   }
 
   try {
+    Start-Process -FilePath 'rundll32.exe' -ArgumentList 'url.dll,FileProtocolHandler', $Url | Out-Null
+    return
+  }
+  catch {
+  }
+
+  try {
     & explorer.exe $Url | Out-Null
     return
   }

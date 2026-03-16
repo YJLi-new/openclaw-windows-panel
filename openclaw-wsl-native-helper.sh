@@ -33,6 +33,21 @@ resolve_control_ui_url() {
   printf '%s' "${raw%/}/chat?session=main"
 }
 
+open_windows_url() {
+  local url="$1"
+  if command -v powershell.exe >/dev/null 2>&1; then
+    OPENCLAW_TARGET_URL="$url" powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[System.Diagnostics.Process]::Start($env:OPENCLAW_TARGET_URL) | Out-Null" >/dev/null 2>&1 && return 0
+    OPENCLAW_TARGET_URL="$url" powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath 'rundll32.exe' -ArgumentList 'url.dll,FileProtocolHandler', $env:OPENCLAW_TARGET_URL" >/dev/null 2>&1 && return 0
+  fi
+  if command -v rundll32.exe >/dev/null 2>&1; then
+    rundll32.exe url.dll,FileProtocolHandler "$url" >/dev/null 2>&1 && return 0
+  fi
+  if command -v explorer.exe >/dev/null 2>&1; then
+    explorer.exe "$url" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
 ensure_parent_dir() {
   mkdir -p "$(dirname "$1")"
 }
@@ -196,12 +211,10 @@ open_dashboard() {
   token="$(get_token)"
   url="$(resolve_control_ui_url)#token=${token}"
 
-  if command -v powershell.exe >/dev/null 2>&1; then
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process '$url'" >/dev/null 2>&1 || true
-  elif command -v explorer.exe >/dev/null 2>&1; then
-    explorer.exe "$url" >/dev/null 2>&1 || true
-  elif command -v wslview >/dev/null 2>&1; then
-    wslview "$url" >/dev/null 2>&1 || true
+  if ! open_windows_url "$url"; then
+    if command -v wslview >/dev/null 2>&1; then
+      wslview "$url" >/dev/null 2>&1 || true
+    fi
   fi
 
   printf '%s\n' "$url"

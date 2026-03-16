@@ -31,12 +31,27 @@ resolve_control_ui_url() {
   printf '%s' "${raw%/}/chat?session=main"
 }
 
+open_windows_url() {
+  local url="$1"
+  if command -v powershell.exe >/dev/null 2>&1; then
+    OPENCLAW_TARGET_URL="$url" powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "[System.Diagnostics.Process]::Start($env:OPENCLAW_TARGET_URL) | Out-Null" >/dev/null 2>&1 && return 0
+    OPENCLAW_TARGET_URL="$url" powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath 'rundll32.exe' -ArgumentList 'url.dll,FileProtocolHandler', $env:OPENCLAW_TARGET_URL" >/dev/null 2>&1 && return 0
+  fi
+  if command -v rundll32.exe >/dev/null 2>&1; then
+    rundll32.exe url.dll,FileProtocolHandler "$url" >/dev/null 2>&1 && return 0
+  fi
+  if command -v explorer.exe >/dev/null 2>&1; then
+    explorer.exe "$url" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
 if [[ "${1:-}" == "dashboard" ]]; then
   token="$(powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$entry_script" config get gateway.auth.token)"
   token="${token//$'\r'/}"
   token="${token//$'\n'/}"
   url="$(resolve_control_ui_url)#token=${token}"
-  explorer.exe "$url" >/dev/null 2>&1 || true
+  open_windows_url "$url" || true
   printf 'dashboard_url=%s\n' "$url"
   exit 0
 fi

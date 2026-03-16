@@ -196,6 +196,13 @@ function Open-DashboardUrl {
   }
 
   try {
+    Start-Process -FilePath 'rundll32.exe' -ArgumentList 'url.dll,FileProtocolHandler', $Url | Out-Null
+    return
+  }
+  catch {
+  }
+
+  try {
     Start-Process -FilePath 'explorer.exe' -ArgumentList $Url | Out-Null
     return
   }
@@ -203,7 +210,7 @@ function Open-DashboardUrl {
   }
 
   $taskName = 'OpenClawDashboardOpenOnce'
-  $command = "Start-Process '$Url'"
+  $command = "Start-Process -FilePath 'rundll32.exe' -ArgumentList 'url.dll,FileProtocolHandler', '$Url'"
   $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($command))
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + $encoded)
   $principal = New-ScheduledTaskPrincipal -UserId $windowsUser -LogonType Interactive -RunLevel Highest
