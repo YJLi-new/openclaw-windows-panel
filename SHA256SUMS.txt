@@ -1,1 +1,1 @@
-f84598fb0009a060db47a2d515c5148e3a97c3832cfec2d302508ad4e3ec6444  openclaw-control-panel.exe
+3f84cc8edb8c7aff2805ccbf976c6dcb660b7c7f180e836ddc5eb51a93dab8c1  openclaw-control-panel.exe
