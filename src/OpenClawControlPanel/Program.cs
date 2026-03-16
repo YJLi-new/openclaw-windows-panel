@@ -1859,28 +1859,42 @@ namespace OpenClawControlPanel
             {
                 string openclaw = NormalizeCommandText(_wslNativeOpenclawCommand, DefaultWslNativeOpenclawCommand);
                 int port = GetGatewayPort();
+                string rootUrl = NormalizeGatewayRootUrl(_gatewayRootUrl);
+                string healthUrl = rootUrl.TrimEnd('/') + "/health";
                 return string.Join(
                     "\n",
                     "set +e",
                     BuildWslProxyPrelude(),
                     "if [ -d " + BashQuote(_wslNativeProjectDir) + " ]; then cd " + BashQuote(_wslNativeProjectDir) + "; fi",
                     "OPENCLAW_BIN=" + BashQuote(openclaw),
+                    "wait_for_gateway() {",
+                    "  for _try in 1 2 3 4 5 6 7 8; do",
+                    "    if command -v curl >/dev/null 2>&1; then",
+                    "      health_code=\"$(curl -m 4 -s -o /dev/null -w '%{http_code}' " + BashQuote(healthUrl) + " 2>/dev/null)\"",
+                    "      if [ \"$health_code\" = \"200\" ]; then",
+                    "        return 0",
+                    "      fi",
+                    "    fi",
+                    "    if ss -ltn 2>/dev/null | grep -F \":" + port + "\" >/dev/null 2>&1; then",
+                    "      return 0",
+                    "    fi",
+                    "    sleep 1",
+                    "  done",
+                    "  return 1",
+                    "}",
                     "\"$OPENCLAW_BIN\" gateway start >/tmp/openclaw-native-start.log 2>&1",
                     "start_ec=$?",
                     "cat /tmp/openclaw-native-start.log 2>/dev/null || true",
-                    "if [ $start_ec -eq 0 ]; then",
+                    "if [ $start_ec -eq 0 ] && wait_for_gateway; then",
                     "  echo \"ok=1\"",
                     "  exit 0",
                     "fi",
                     "nohup \"$OPENCLAW_BIN\" gateway run --bind loopback --port " + port + " --allow-unconfigured >/tmp/openclaw-native-gateway.log 2>&1 &",
-                    "for _try in 1 2 3 4 5; do",
-                    "  if ss -ltn 2>/dev/null | grep -F \":" + port + "\" >/dev/null 2>&1; then",
-                    "    echo \"fallback=run-background\"",
-                    "    echo \"ok=1\"",
-                    "    exit 0",
-                    "  fi",
-                    "  sleep 1",
-                    "done",
+                    "if wait_for_gateway; then",
+                    "  echo \"fallback=run-background\"",
+                    "  echo \"ok=1\"",
+                    "  exit 0",
+                    "fi",
                     "echo \"ok=0\"",
                     "exit 1");
             }
@@ -1919,11 +1933,25 @@ namespace OpenClawControlPanel
             private string BuildWslNativeOpenDashboardCommand()
             {
                 string openclaw = GetWslNativeDashboardCliCommand();
+                string rootUrl = NormalizeGatewayRootUrl(_gatewayRootUrl);
+                string healthUrl = rootUrl.TrimEnd('/') + "/health";
                 return string.Join(
                     "\n",
                     "set +e",
                     BuildWslProxyPrelude(),
                     "OPENCLAW_BIN=" + BashQuote(openclaw),
+                    "root_code=\"000\"",
+                    "health_code=\"000\"",
+                    "if command -v curl >/dev/null 2>&1; then",
+                    "  root_code=\"$(curl -m 4 -s -o /dev/null -w '%{http_code}' " + BashQuote(rootUrl) + " 2>/dev/null)\"",
+                    "  health_code=\"$(curl -m 4 -s -o /dev/null -w '%{http_code}' " + BashQuote(healthUrl) + " 2>/dev/null)\"",
+                    "  [ -n \"$root_code\" ] || root_code=\"000\"",
+                    "  [ -n \"$health_code\" ] || health_code=\"000\"",
+                    "fi",
+                    "if [ \"$root_code\" = \"000\" ] && [ \"$health_code\" != \"200\" ]; then",
+                    "  echo \"Gateway not reachable at " + BashQuote(rootUrl) + "\"",
+                    "  exit 1",
+                    "fi",
                     "dashboard_output=\"$($OPENCLAW_BIN dashboard --no-open 2>&1)\"",
                     "dash_ec=$?",
                     "if [ -n \"$dashboard_output\" ]; then",
@@ -1937,6 +1965,7 @@ namespace OpenClawControlPanel
                 string openclaw = GetWslNativeDashboardCliCommand();
                 string rootUrl = NormalizeGatewayRootUrl(_gatewayRootUrl);
                 string healthUrl = rootUrl.TrimEnd('/') + "/health";
+                int port = GetGatewayPort();
                 return string.Join(
                     "\n",
                     "set +e",
@@ -1952,7 +1981,15 @@ namespace OpenClawControlPanel
                     "  dashboard_output=\"\"",
                     "fi",
                     "if printf '%s\\n' \"$dashboard_output\" | grep -Eiq '(^Dashboard URL:\\s*https?://.*[#?]token=|^dashboard_url=https?://.*[#?]token=|^https?://.*[#?]token=)'; then echo \"token=ok\"; else echo \"token=missing\"; fi",
-                    "if pgrep -f \"openclaw gateway\" >/dev/null 2>&1; then",
+                    "gateway_state=\"stopped\"",
+                    "if ss -ltn 2>/dev/null | grep -F \":" + port + "\" >/dev/null 2>&1; then",
+                    "  gateway_state=\"running\"",
+                    "fi",
+                    "if [ \"$gateway_state\" = \"stopped\" ] && command -v curl >/dev/null 2>&1; then",
+                    "  health_code_probe=\"$(curl -m 4 -s -o /dev/null -w '%{http_code}' " + BashQuote(healthUrl) + " 2>/dev/null)\"",
+                    "  if [ \"$health_code_probe\" = \"200\" ]; then gateway_state=\"running\"; fi",
+                    "fi",
+                    "if [ \"$gateway_state\" = \"running\" ]; then",
                     "  echo \"gateway=running\"",
                     "  echo \"gateway_container=running\"",
                     "else",
