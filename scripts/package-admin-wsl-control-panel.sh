@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_ROOT="$ROOT_DIR/dist"
 PACKAGE_DIR="$DIST_ROOT/openclaw-control-panel-admin-wsl"
 ZIP_PATH="$DIST_ROOT/openclaw-control-panel-admin-wsl.zip"
@@ -12,30 +13,32 @@ mkdir -p "$PACKAGE_DIR"
 
 files=(
   "openclaw-control-panel.exe"
-  "openclaw-control-panel.ico"
-  "openclaw-find-runtime-paths.ps1"
-  "openclaw-open-dashboard-wsl.sh"
-  "openclaw-start-fast.sh"
-  "openclaw-wsl-bridge-runner.ps1"
-  "openclaw-wsl-bridge.ps1"
-  "openclaw-wsl-admin-bridge.sh"
-  "openclaw-wsl-native-dashboard.sh"
-  "openclaw-wsl-native-helper.sh"
-  "install-openclaw-wsl-bridge.ps1"
-  "openclaw-win-admin-wsl-gateway-task.ps1"
-  "openclaw-win-admin-wsl-entry.ps1"
-  "openclaw-win-admin-wsl-install.ps1"
-  "new-admin-wsl-panel-settings.ps1"
-  "ADMIN_WSL_BUNDLE.md"
+  "assets/openclaw-control-panel.ico"
+  "scripts/openclaw-find-runtime-paths.ps1"
+  "scripts/openclaw-open-dashboard-wsl.sh"
+  "scripts/openclaw-start-fast.sh"
+  "scripts/openclaw-wsl-bridge-runner.ps1"
+  "scripts/openclaw-wsl-bridge.ps1"
+  "scripts/openclaw-wsl-admin-bridge.sh"
+  "scripts/openclaw-wsl-native-dashboard.sh"
+  "scripts/openclaw-wsl-native-helper.sh"
+  "scripts/install-openclaw-wsl-bridge.ps1"
+  "scripts/openclaw-win-admin-wsl-gateway-task.ps1"
+  "scripts/openclaw-win-admin-wsl-entry.ps1"
+  "scripts/openclaw-win-admin-wsl-install.ps1"
+  "scripts/new-admin-wsl-panel-settings.ps1"
+  "docs/ADMIN_WSL_BUNDLE.md"
 )
 
 for file in "${files[@]}"; do
-  cp "$ROOT_DIR/$file" "$PACKAGE_DIR/$file"
+  cp "$ROOT_DIR/$file" "$PACKAGE_DIR/$(basename "$file")"
 done
 
 (
   cd "$PACKAGE_DIR"
-  sha256sum "${files[@]}" > SHA256SUMS.txt
+  for file in "${files[@]}"; do
+    sha256sum "$(basename "$file")"
+  done > SHA256SUMS.txt
 )
 
 rm -f "$ZIP_PATH"

@@ -29,7 +29,7 @@ namespace OpenClawControlPanel
         private static readonly string DefaultBaseDirWsl = ConvertWindowsPathToWsl(AppBaseDirWindows);
         private static readonly string SettingsFileWindows = Path.Combine(AppBaseDirWindows, "openclaw-control-panel-settings.json");
         private static readonly string ErrorLogFileWindows = Path.Combine(AppBaseDirWindows, "openclaw-control-panel-error.log");
-        private static readonly string IconFileWindows = Path.Combine(AppBaseDirWindows, "openclaw-control-panel.ico");
+        private static readonly string IconFileWindows = ResolveIconFileWindows();
         private static readonly object ErrorLogLock = new object();
 
         [DllImport("user32.dll")]
@@ -165,6 +165,23 @@ namespace OpenClawControlPanel
             }
 
             return ".";
+        }
+
+        private static string ResolveIconFileWindows()
+        {
+            string rootIconPath = Path.Combine(AppBaseDirWindows, "openclaw-control-panel.ico");
+            if (File.Exists(rootIconPath))
+            {
+                return rootIconPath;
+            }
+
+            string assetsIconPath = Path.Combine(AppBaseDirWindows, "assets", "openclaw-control-panel.ico");
+            if (File.Exists(assetsIconPath))
+            {
+                return assetsIconPath;
+            }
+
+            return rootIconPath;
         }
 
         private static string TrimTrailingPathSeparators(string path)
