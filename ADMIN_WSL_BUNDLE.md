@@ -21,6 +21,7 @@
 - `openclaw-win-admin-wsl-gateway-task.ps1`
 - `openclaw-wsl-bridge.ps1`
 - `openclaw-wsl-bridge-runner.ps1`
+- `openclaw-wsl-admin-bridge.sh`
 - `install-openclaw-wsl-bridge.ps1`
 - `new-admin-wsl-panel-settings.ps1`
 - `openclaw-find-runtime-paths.ps1`
@@ -47,6 +48,7 @@ Set-ExecutionPolicy -Scope Process Bypass
   - 通过 `http://127.0.0.1:18790/health` 探测
 - Open Dashboard
   - 自动拼接 token 后打开浏览器
+  - 即使 GUI 错误落到 `wsl_native` 分支，也会通过 `openclaw-wsl-admin-bridge.sh` 回到 Windows 侧 PowerShell 入口，再用 Windows 默认浏览器打开
 - Runtime diagnostics
   - 可输出 bridge task、gateway task、WSL distro、用户、project dir 和 config path
 - 通用 CLI bridge

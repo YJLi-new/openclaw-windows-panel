@@ -16,6 +16,7 @@ files=(
   "openclaw-find-runtime-paths.ps1"
   "openclaw-wsl-bridge-runner.ps1"
   "openclaw-wsl-bridge.ps1"
+  "openclaw-wsl-admin-bridge.sh"
   "install-openclaw-wsl-bridge.ps1"
   "openclaw-win-admin-wsl-gateway-task.ps1"
   "openclaw-win-admin-wsl-entry.ps1"

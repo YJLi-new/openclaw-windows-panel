@@ -17,6 +17,19 @@ if ([string]::IsNullOrWhiteSpace($WslProjectDir)) {
   $WslProjectDir = '\\wsl$\' + $Distro + '\opt\openclaw-zh'
 }
 
+function Convert-WindowsPathToWsl {
+  param([Parameter(Mandatory = $true)][string]$Path)
+
+  $normalized = $Path -replace '\\', '/'
+  if ($normalized -match '^([A-Za-z]):/(.*)$') {
+    return '/mnt/' + $Matches[1].ToLower() + '/' + $Matches[2]
+  }
+
+  return $normalized
+}
+
+$WslBridgeCommand = Convert-WindowsPathToWsl (Join-Path $PSScriptRoot 'openclaw-wsl-admin-bridge.sh')
+
 $settings = [ordered]@{
   schema_version = 2
   language = 'zh-Hans'
@@ -37,8 +50,8 @@ $settings = [ordered]@{
     }
     wsl_native = [ordered]@{
       wsl_native_project_dir = '/opt/openclaw-zh'
-      wsl_native_openclaw_command = ''
-      wsl_native_install_command = ''
+      wsl_native_openclaw_command = $WslBridgeCommand
+      wsl_native_install_command = $WslBridgeCommand + ' gateway start'
     }
     win_docker = [ordered]@{
       win_docker_openclaw_dir = ''

@@ -322,18 +322,50 @@ function Get-WslRuntimeSummary {
   }
 }
 
+function Get-RunningPanelProcesses {
+  $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'openclaw-control-panel.exe' })
+  $results = @()
+
+  foreach ($process in $processes) {
+    if ([string]::IsNullOrWhiteSpace($process.ExecutablePath)) {
+      continue
+    }
+
+    $exeDir = Split-Path -Parent $process.ExecutablePath
+    if ([string]::IsNullOrWhiteSpace($exeDir)) {
+      continue
+    }
+
+    $results += [pscustomobject]@{
+      process_id = $process.ProcessId
+      executable_path = $process.ExecutablePath
+      command_line = $process.CommandLine
+      settings_path = Join-Path $exeDir 'openclaw-control-panel-settings.json'
+      error_log_path = Join-Path $exeDir 'openclaw-control-panel-error.log'
+    }
+  }
+
+  return @($results | Sort-Object executable_path -Unique)
+}
+
 $packageDir = $PSScriptRoot
 $packageExe = Join-Path $packageDir 'openclaw-control-panel.exe'
 $packageSettings = Join-Path $packageDir 'openclaw-control-panel-settings.json'
-
-$observedActiveCandidates = @(
-  'E:\OPC\panel\openclaw-control-panel-settings.json',
-  'E:\openclaw-windows-panel-main\openclaw-control-panel-settings.json'
-) | Select-Object -Unique
+$runningPanels = @(Get-RunningPanelProcesses)
+$observedActiveCandidates = @($runningPanels | ForEach-Object { $_.settings_path } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
 
 $settingsCandidates = @($packageSettings) + $observedActiveCandidates | Select-Object -Unique
 $settingsSummaries = @($settingsCandidates | ForEach-Object { Read-SettingsSummary $_ })
-$activeSettingsCandidates = @($settingsSummaries | Where-Object { $_.exists -and $_.path -ne $packageSettings })
+$activeSettingsCandidates = @(
+  foreach ($summary in $settingsSummaries) {
+    if (-not $summary.exists) {
+      continue
+    }
+    if ($summary.path -in $observedActiveCandidates) {
+      $summary
+    }
+  }
+)
 $activeSettings = $activeSettingsCandidates | Select-Object -First 1
 $packageSettingsSummary = $settingsSummaries | Where-Object { $_.path -eq $packageSettings } | Select-Object -First 1
 
@@ -348,9 +380,11 @@ if ($activeSettings) {
   $notes.Add("Observed active settings file: $($activeSettings.path)")
   if ($activeSettings.path -ne $packageSettings) {
     $notes.Add('Do not assume the EXE-directory settings file is the one currently in use.')
+  } else {
+    $notes.Add('The running panel is using the settings file next to this bundle.')
   }
 } else {
-  $notes.Add('No observed active settings file was found in the known runtime location list.')
+  $notes.Add('No observed active settings file was found next to any currently running panel executable.')
 }
 
 if ($packageSettingsSummary.exists -and $activeSettings) {
@@ -388,6 +422,7 @@ $report = [pscustomobject]@{
   package_dir = $packageDir
   panel_exe_exists = Test-Path -LiteralPath $packageExe
   panel_exe = $packageExe
+  running_panels = $runningPanels
   package_settings = $packageSettingsSummary
   observed_active_settings = $activeSettings
   all_active_settings_candidates = $activeSettingsCandidates
