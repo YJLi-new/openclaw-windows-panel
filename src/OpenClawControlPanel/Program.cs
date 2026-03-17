@@ -5871,6 +5871,11 @@ namespace OpenClawControlPanel
                     return false;
                 }
 
+                if (TryLaunchEdgeNewWindow(target))
+                {
+                    return true;
+                }
+
                 try
                 {
                     Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
@@ -5890,6 +5895,116 @@ namespace OpenClawControlPanel
                 }
 
                 return false;
+            }
+
+            private static bool TryLaunchEdgeNewWindow(string url)
+            {
+                Uri targetUri;
+                if (!Uri.TryCreate(url, UriKind.Absolute, out targetUri))
+                {
+                    return false;
+                }
+
+                if (!string.Equals(targetUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(targetUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string edgePath = FindEdgeExecutable();
+                if (string.IsNullOrWhiteSpace(edgePath))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    string arguments = "--new-window \"" + url.Replace("\"", "%22") + "\"";
+                    if (ShouldUseDedicatedDashboardProfile(targetUri))
+                    {
+                        string profileDir = GetDedicatedDashboardProfileDir();
+                        if (!string.IsNullOrWhiteSpace(profileDir))
+                        {
+                            arguments = "--user-data-dir=\"" + profileDir + "\" " + arguments;
+                        }
+                    }
+
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = edgePath,
+                        Arguments = arguments,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    Process.Start(psi);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            private static string FindEdgeExecutable()
+            {
+                string[] candidates =
+                {
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Edge", "Application", "msedge.exe")
+                };
+
+                foreach (string candidate in candidates)
+                {
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                return string.Empty;
+            }
+
+            private static bool ShouldUseDedicatedDashboardProfile(Uri targetUri)
+            {
+                if (targetUri == null)
+                {
+                    return false;
+                }
+
+                string host = targetUri.Host ?? string.Empty;
+                if (!string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(host, "::1", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string fragment = targetUri.Fragment ?? string.Empty;
+                return fragment.IndexOf("token=", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            private static string GetDedicatedDashboardProfileDir()
+            {
+                try
+                {
+                    string baseDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "OpenClawControlPanel",
+                        "edge-dashboard-profile");
+                    Directory.CreateDirectory(baseDir);
+                    return baseDir;
+                }
+                catch
+                {
+                    return string.Empty;
+                }
             }
 
             private CommandResult RunCommandCapture(CommandSpec spec)
