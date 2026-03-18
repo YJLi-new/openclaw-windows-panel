@@ -9,6 +9,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace OpenClawControlPanel
@@ -5603,10 +5604,11 @@ namespace OpenClawControlPanel
                     delegate { return RunCommandCapture(BuildOpenDashboardCommandSpec()); },
                     delegate(CommandResult result)
                     {
-                        EmitOutput(result.Output);
+                        string normalizedOutput = NormalizeDashboardOutputForUi(result.Output);
+                        EmitOutput(normalizedOutput);
                         if (result.ExitCode == 0)
                         {
-                            string dashboardUrl = ExtractDashboardUrlFromOutput(result.Output);
+                            string dashboardUrl = ExtractDashboardUrlFromOutput(normalizedOutput);
                             if (!string.IsNullOrWhiteSpace(dashboardUrl))
                             {
                                 if (TryOpenUrl(dashboardUrl))
@@ -5645,9 +5647,10 @@ namespace OpenClawControlPanel
 
             private void ApplyHealthCheckResult(CommandResult result, bool backgroundProbe)
             {
+                string normalizedOutput = NormalizeStatusOutputForUi(result.Output);
                 if (!backgroundProbe)
                 {
-                    EmitOutput(result.Output);
+                    EmitOutput(normalizedOutput);
                 }
 
                 if (result.ExitCode != 0)
@@ -5660,7 +5663,7 @@ namespace OpenClawControlPanel
                     return;
                 }
 
-                var kv = ParseKeyValueLines(result.Output);
+                var kv = ParseKeyValueLines(normalizedOutput);
                 bool dockerUp = Get(kv, "docker") == "up";
                 string gatewayState = FirstNonEmpty(Get(kv, "gateway"), Get(kv, "gateway_container"));
                 bool gatewayRunning = string.Equals(gatewayState, "running", StringComparison.OrdinalIgnoreCase);
@@ -5881,6 +5884,180 @@ namespace OpenClawControlPanel
                     }
                 }
                 return map;
+            }
+
+            private static string TryReadGatewayTokenFromOpenClawConfig()
+            {
+                try
+                {
+                    string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    if (string.IsNullOrWhiteSpace(userProfile))
+                    {
+                        userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(userProfile))
+                    {
+                        return string.Empty;
+                    }
+
+                    string configPath = Path.Combine(userProfile, ".openclaw", "openclaw.json");
+                    if (!File.Exists(configPath))
+                    {
+                        return string.Empty;
+                    }
+
+                    string json = File.ReadAllText(configPath, Encoding.UTF8);
+                    if (string.IsNullOrWhiteSpace(json))
+                    {
+                        return string.Empty;
+                    }
+
+                    Match match = Regex.Match(
+                        json,
+                        "\"gateway\"\\s*:\\s*\\{.*?\"auth\"\\s*:\\s*\\{.*?\"token\"\\s*:\\s*\"(?<token>[^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    if (!match.Success)
+                    {
+                        return string.Empty;
+                    }
+
+                    string token = Regex.Unescape(match.Groups["token"].Value ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(token) ||
+                        string.Equals(token, "__OPENCLAW_REDACTED__", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(token, "dev-local-token", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return string.Empty;
+                    }
+
+                    return token;
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+
+            private string EnsureDashboardUrlHasToken(string dashboardUrl)
+            {
+                string url = string.IsNullOrWhiteSpace(dashboardUrl)
+                    ? NormalizeGatewayRootUrl(_gatewayRootUrl)
+                    : dashboardUrl.Trim();
+
+                if (url.Length == 0)
+                {
+                    return string.Empty;
+                }
+
+                if (url.IndexOf("#token=", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    url.IndexOf("?token=", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return url;
+                }
+
+                string token = TryReadGatewayTokenFromOpenClawConfig();
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    return url;
+                }
+
+                if (url.IndexOf('#') >= 0)
+                {
+                    return url + "&token=" + token;
+                }
+
+                return url + "#token=" + token;
+            }
+
+            private string NormalizeDashboardOutputForUi(string output)
+            {
+                string normalizedUrl = EnsureDashboardUrlHasToken(ExtractDashboardUrlFromOutput(output));
+                if (string.IsNullOrWhiteSpace(normalizedUrl))
+                {
+                    return output ?? string.Empty;
+                }
+
+                var lines = new List<string>();
+                bool sawDashboardUrl = false;
+                bool replacedDisplayUrl = false;
+                bool hadContent = false;
+
+                foreach (string raw in (output ?? string.Empty).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                {
+                    string line = raw ?? string.Empty;
+                    string trimmed = line.Trim();
+                    if (trimmed.Length > 0)
+                    {
+                        hadContent = true;
+                    }
+
+                    if (trimmed.StartsWith("dashboard_url=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        lines.Add("dashboard_url=" + normalizedUrl);
+                        sawDashboardUrl = true;
+                        replacedDisplayUrl = true;
+                        continue;
+                    }
+
+                    if (trimmed.StartsWith("Dashboard URL:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        lines.Add("Dashboard URL: " + normalizedUrl);
+                        replacedDisplayUrl = true;
+                        continue;
+                    }
+
+                    lines.Add(line);
+                }
+
+                if (!hadContent)
+                {
+                    return "dashboard_url=" + normalizedUrl;
+                }
+
+                if (!sawDashboardUrl)
+                {
+                    lines.Insert(0, "dashboard_url=" + normalizedUrl);
+                }
+
+                if (!replacedDisplayUrl)
+                {
+                    lines.Add("Dashboard URL: " + normalizedUrl);
+                }
+
+                return string.Join(Environment.NewLine, lines.ToArray()).Trim();
+            }
+
+            private static string NormalizeStatusOutputForUi(string output)
+            {
+                string token = TryReadGatewayTokenFromOpenClawConfig();
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    return output ?? string.Empty;
+                }
+
+                var lines = new List<string>();
+                bool sawTokenLine = false;
+
+                foreach (string raw in (output ?? string.Empty).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                {
+                    string line = raw ?? string.Empty;
+                    string trimmed = line.Trim();
+                    if (trimmed.StartsWith("token=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        lines.Add("token=ok");
+                        sawTokenLine = true;
+                        continue;
+                    }
+
+                    lines.Add(line);
+                }
+
+                if (!sawTokenLine)
+                {
+                    lines.Add("token=ok");
+                }
+
+                return string.Join(Environment.NewLine, lines.ToArray()).Trim();
             }
 
             private static string ExtractDashboardUrlFromOutput(string text)
