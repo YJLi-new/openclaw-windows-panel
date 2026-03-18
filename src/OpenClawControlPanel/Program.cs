@@ -2199,6 +2199,7 @@ namespace OpenClawControlPanel
             {
                 string projectDir = EscapePowerShellSingleQuoted(NormalizeWindowsPath(_winNativeProjectDir));
                 string openclaw = EscapePowerShellSingleQuoted(NormalizeCommandText(_winNativeOpenclawCommand, DefaultWinNativeOpenclawCommand));
+                string healthUrl = EscapePowerShellSingleQuoted(NormalizeGatewayRootUrl(_gatewayRootUrl).TrimEnd('/') + "/health");
                 int port = GetGatewayPort();
                 return string.Join(
                     "\n",
@@ -2206,12 +2207,26 @@ namespace OpenClawControlPanel
                     BuildPowerShellProxyPrelude(),
                     "if (Test-Path -LiteralPath '" + projectDir + "') { Set-Location '" + projectDir + "' }",
                     "$oc = '" + openclaw + "'",
-                    "& $oc gateway start",
-                    "if ($LASTEXITCODE -eq 0) { Write-Output 'ok=1'; exit 0 }",
-                    "Start-Process -WindowStyle Hidden -FilePath $oc -ArgumentList @('gateway','run','--bind','loopback','--port','" + port + "','--allow-unconfigured') | Out-Null",
-                    "Start-Sleep -Seconds 1",
-                    "Write-Output 'ok=1'",
-                    "exit 0");
+                    "$healthUrl = '" + healthUrl + "'",
+                    "function Test-GatewayHealthy {",
+                    "  try { return [string](Invoke-WebRequest -UseBasicParsing -Uri $healthUrl -TimeoutSec 4).StatusCode -eq '200' }",
+                    "  catch [System.Net.WebException] {",
+                    "    if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { return [string][int]$_.Exception.Response.StatusCode -eq '200' }",
+                    "    return $false",
+                    "  }",
+                    "  catch { return $false }",
+                    "}",
+                    "if (Test-GatewayHealthy) { Write-Output 'ok=1'; exit 0 }",
+                    "$startOutput = (& $oc gateway start 2>&1 | Out-String)",
+                    "if (-not [string]::IsNullOrWhiteSpace($startOutput)) { Write-Output $startOutput.Trim() }",
+                    "Start-Sleep -Seconds 2",
+                    "if (Test-GatewayHealthy) { Write-Output 'ok=1'; exit 0 }",
+                    "$backgroundCommand = \"& '\" + $oc + \"' gateway --bind loopback --port " + port + " --allow-unconfigured\"",
+                    "Start-Process -WindowStyle Hidden -FilePath 'powershell.exe' -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-Command',$backgroundCommand) | Out-Null",
+                    "Start-Sleep -Seconds 2",
+                    "if (Test-GatewayHealthy) { Write-Output 'ok=1'; exit 0 }",
+                    "Write-Output 'ok=0'",
+                    "exit 1");
             }
 
             private string BuildWinNativeStopCommand()
@@ -2232,12 +2247,38 @@ namespace OpenClawControlPanel
             private string BuildWinNativeOpenDashboardCommand()
             {
                 string openclaw = EscapePowerShellSingleQuoted(NormalizeCommandText(_winNativeOpenclawCommand, DefaultWinNativeOpenclawCommand));
+                string rootUrl = EscapePowerShellSingleQuoted(NormalizeGatewayRootUrl(_gatewayRootUrl));
                 return string.Join(
                     "\n",
                     "$ErrorActionPreference = 'Continue'",
                     "$oc = '" + openclaw + "'",
+                    "$rootUrl = '" + rootUrl + "'",
+                    "$configPath = Join-Path $env:USERPROFILE '.openclaw\\openclaw.json'",
+                    "if (-not $rootUrl.EndsWith('/')) { $rootUrl += '/' }",
                     "$dashboardOutput = (& $oc dashboard --no-open 2>&1 | Out-String)",
                     "$ec = $LASTEXITCODE",
+                    "$tokenOutput = (& $oc config get gateway.auth.token 2>$null | Out-String).Trim()",
+                    "$token = ''",
+                    "if (-not [string]::IsNullOrWhiteSpace($tokenOutput) -and $tokenOutput -ne '__OPENCLAW_REDACTED__' -and $tokenOutput -ne 'dev-local-token') { $token = $tokenOutput }",
+                    "if ([string]::IsNullOrWhiteSpace($token) -and (Test-Path -LiteralPath $configPath)) {",
+                    "  try {",
+                    "    $cfg = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json",
+                    "    $cfgToken = $cfg.gateway.auth.token",
+                    "    if (-not [string]::IsNullOrWhiteSpace($cfgToken) -and $cfgToken -ne '__OPENCLAW_REDACTED__' -and $cfgToken -ne 'dev-local-token') { $token = $cfgToken }",
+                    "  }",
+                    "  catch { }",
+                    "}",
+                    "$dashboardUrl = ''",
+                    "foreach ($line in ($dashboardOutput -split \"`r?`n\")) {",
+                    "  $trimmed = ($line | Out-String).Trim()",
+                    "  if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }",
+                    "  if ($trimmed -match '^dashboard_url=(\\S+)$') { $dashboardUrl = $Matches[1]; break }",
+                    "  if ($trimmed -match '^Dashboard URL:\\s*(\\S+)$') { $dashboardUrl = $Matches[1]; continue }",
+                    "  if ($trimmed -match '^https?://\\S+$') { $dashboardUrl = $trimmed; continue }",
+                    "}",
+                    "if ([string]::IsNullOrWhiteSpace($dashboardUrl)) { $dashboardUrl = $rootUrl }",
+                    "if ($dashboardUrl -notmatch '[#?]token=' -and -not [string]::IsNullOrWhiteSpace($token)) { $dashboardUrl = $dashboardUrl + '#token=' + $token }",
+                    "Write-Output ('dashboard_url=' + $dashboardUrl.Trim())",
                     "if (-not [string]::IsNullOrWhiteSpace($dashboardOutput)) { Write-Output $dashboardOutput.Trim() }",
                     "exit $ec");
             }
@@ -2255,17 +2296,29 @@ namespace OpenClawControlPanel
                     "Write-Output ('time=' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))",
                     "Write-Output 'docker=n/a'",
                     "$oc = '" + openclaw + "'",
+                    "$configPath = Join-Path $env:USERPROFILE '.openclaw\\openclaw.json'",
                     "$dashboardOutput = (& $oc dashboard --no-open 2>$null | Out-String)",
-                    "if ($dashboardOutput -match '(?im)^Dashboard URL:\\s*https?://\\S*[#?]token=' -or $dashboardOutput -match '(?im)^dashboard_url=https?://\\S*[#?]token=' -or $dashboardOutput -match '(?im)^https?://\\S*[#?]token=') { Write-Output 'token=ok' } else { Write-Output 'token=missing' }",
+                    "$tokenText = (& $oc config get gateway.auth.token 2>$null | Out-String).Trim()",
+                    "$tokenOk = (-not [string]::IsNullOrWhiteSpace($tokenText) -and $tokenText -ne '__OPENCLAW_REDACTED__' -and $tokenText -ne 'dev-local-token')",
+                    "if (-not $tokenOk -and (Test-Path -LiteralPath $configPath)) {",
+                    "  try {",
+                    "    $cfg = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json",
+                    "    $cfgToken = $cfg.gateway.auth.token",
+                    "    if (-not [string]::IsNullOrWhiteSpace($cfgToken) -and $cfgToken -ne '__OPENCLAW_REDACTED__' -and $cfgToken -ne 'dev-local-token') { $tokenOk = $true }",
+                    "  }",
+                    "  catch { }",
+                    "}",
+                    "if (-not $tokenOk -and ($dashboardOutput -match '(?im)^Dashboard URL:\\s*https?://\\S*[#?]token=' -or $dashboardOutput -match '(?im)^dashboard_url=https?://\\S*[#?]token=' -or $dashboardOutput -match '(?im)^https?://\\S*[#?]token=')) { $tokenOk = $true }",
+                    "if ($tokenOk) { Write-Output 'token=ok' } else { Write-Output 'token=missing' }",
                     "$gatewayText = (& $oc gateway status 2>&1 | Out-String)",
-                    "if ($gatewayText -match 'Runtime:\\s+running') { $g='running' } elseif ($gatewayText -match 'Runtime:\\s+stopped') { $g='stopped' } else { $g='unknown' }",
-                    "Write-Output ('gateway=' + $g)",
-                    "Write-Output ('gateway_container=' + $g)",
                     "$rootCode = '000'",
                     "$healthCode = '000'",
                     "try { $rootCode = [string](Invoke-WebRequest -UseBasicParsing -Uri '" + rootUrl + "' -TimeoutSec 4).StatusCode } catch [System.Net.WebException] { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $rootCode = [string][int]$_.Exception.Response.StatusCode } } catch { }",
                     "try { $healthCode = [string](Invoke-WebRequest -UseBasicParsing -Uri '" + healthUrl + "' -TimeoutSec 4).StatusCode } catch [System.Net.WebException] { if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $healthCode = [string][int]$_.Exception.Response.StatusCode } } catch { }",
                     "if ($rootCode -eq '000' -and $healthCode -eq '200') { $rootCode = '200' }",
+                    "if ($gatewayText -match 'Runtime:\\s+running' -or $healthCode -eq '200' -or $rootCode -eq '200') { $g='running' } elseif ($gatewayText -match 'Runtime:\\s+stopped') { $g='stopped' } elseif ($rootCode -eq '000' -and $healthCode -eq '000') { $g='stopped' } else { $g='unknown' }",
+                    "Write-Output ('gateway=' + $g)",
+                    "Write-Output ('gateway_container=' + $g)",
                     "Write-Output ('http_root=' + $rootCode)",
                     "Write-Output ('http_health=' + $healthCode)",
                     "Write-Output 'ok=1'");
@@ -5838,6 +5891,7 @@ namespace OpenClawControlPanel
                 }
 
                 string[] lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                string fallbackUrl = string.Empty;
                 foreach (string raw in lines)
                 {
                     string line = (raw ?? string.Empty).Trim();
@@ -5847,20 +5901,43 @@ namespace OpenClawControlPanel
                     }
                     if (line.StartsWith("Dashboard URL:", StringComparison.OrdinalIgnoreCase))
                     {
-                        return line.Substring("Dashboard URL:".Length).Trim();
+                        string candidate = line.Substring("Dashboard URL:".Length).Trim();
+                        if (candidate.IndexOf("#token=", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            candidate.IndexOf("?token=", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return candidate;
+                        }
+                        if (fallbackUrl.Length == 0)
+                        {
+                            fallbackUrl = candidate;
+                        }
+                        continue;
                     }
                     if (line.StartsWith("dashboard_url=", StringComparison.OrdinalIgnoreCase))
                     {
-                        return line.Substring("dashboard_url=".Length).Trim();
+                        string candidate = line.Substring("dashboard_url=".Length).Trim();
+                        if (candidate.Length > 0)
+                        {
+                            return candidate;
+                        }
+                        continue;
                     }
                     if (line.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                         line.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                     {
-                        return line;
+                        if (line.IndexOf("#token=", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            line.IndexOf("?token=", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return line;
+                        }
+                        if (fallbackUrl.Length == 0)
+                        {
+                            fallbackUrl = line;
+                        }
                     }
                 }
 
-                return string.Empty;
+                return fallbackUrl;
             }
 
             private static bool TryOpenUrl(string url)
